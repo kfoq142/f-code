@@ -20,6 +20,7 @@ int main(int argc, char* argv[]) {
 	DWORD thunk = NULL;
 	DWORD rawOffset = NULL;
 	DWORD numberofsection = NULL;
+
 	if (argc != 2) {
 		printf("==> Input: FileExecute.exe + Path File Parsing");
 		return 0;
@@ -144,64 +145,65 @@ int main(int argc, char* argv[]) {
 		sectionLocation += sectionSize;
 	}
 
-	//rawOffset = (DWORD)fileData + exportSection->PointerToRawData;
-
-	//exportDirectory = (PIMAGE_EXPORT_DIRECTORY)(rawOffset + (imageNTHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress - exportSection->VirtualAddress));
-
-	printf("\n[4] ***** EXPORTS DIRECTORY *****\n");
-	printf("\tNot done!!!");
-
-	//// DLL name
-	//printf("\tDLL Name: %s\n", rawOffset + (exportDirectory->Name - exportSection->VirtualAddress));
-
-	//printf("\tBase: %x\n", exportDirectory->Base);
-	//printf("\tNumber of Functions: %x\n", exportDirectory->NumberOfFunctions);
-	//printf("\tNumber of Names: %x\n", exportDirectory->NumberOfNames);
-	//printf("\tAddress of Functions: %x\n", rawOffset + (exportDirectory->AddressOfFunctions - exportSection->VirtualAddress));
-	//printf("\tAddress of Names: %x\n", rawOffset + (exportDirectory->AddressOfNames - exportSection->VirtualAddress));
-	//printf("\tAddress of Name Ordinals: %x\n", rawOffset + (exportDirectory->AddressOfNameOrdinals - exportSection->VirtualAddress));
-
-	//// Exported functions
-	//PDWORD addressOfFunctions = (PDWORD)(rawOffset + (exportDirectory->AddressOfFunctions - exportSection->VirtualAddress));
-	//PWORD addressOfOrdinals = (PWORD)(rawOffset + (exportDirectory->AddressOfNameOrdinals - exportSection->VirtualAddress));
-	//PDWORD addressOfNames = (PDWORD)(rawOffset + (exportDirectory->AddressOfNames - exportSection->VirtualAddress));
-
-	//for (DWORD i = 0; i < exportDirectory->NumberOfFunctions; i++) {
-	//	printf("\n\tFunction %x:\n", i + exportDirectory->Base);
-	//	printf("\t\tOrdinal: %x\n", i + exportDirectory->Base);
-	//	printf("\t\tAddress: %x\n", addressOfFunctions[i]);
-
-	//	if (i < exportDirectory->NumberOfNames) {
-	//		printf("\t\tFunction Name: %s\n", rawOffset + (addressOfNames[i] - exportSection->VirtualAddress));
-	//	}
-
-	//	printf("\t\tOrdinal (Name Ordinal): %x\n", addressOfOrdinals[i]);
-	//}
-
-	// get file offset to import table
-	rawOffset = (DWORD)fileData + importSection->PointerToRawData;
-
-	// get pointer to import descriptor's file offset. Note that the formula for calculating file offset is: imageBaseAddress + pointerToRawDataOfTheSectionContainingRVAofInterest + (RVAofInterest - SectionContainingRVAofInterest.VirtualAddress)
-	importDescriptor = (PIMAGE_IMPORT_DESCRIPTOR)(rawOffset + (imageNTHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress - importSection->VirtualAddress));
-
 	printf("\n[5] ***** IMPORTS DIRECTORY *******\n");
-	for (; importDescriptor->Name != 0; importDescriptor++) {
-		// imported dll modules
-		printf("\tDLL Name: %s\n", rawOffset + (importDescriptor->Name - importSection->VirtualAddress));
-		thunk = importDescriptor->OriginalFirstThunk == 0 ? importDescriptor->FirstThunk : importDescriptor->OriginalFirstThunk;
-		thunkData = (PIMAGE_THUNK_DATA)(rawOffset + (thunk - importSection->VirtualAddress));
-		printf("\t\tFunctions:\n");
-		// dll exported functions
-		for (; thunkData->u1.AddressOfData != 0; thunkData++) {
+	if (!(imageNTHeaders->FileHeader.Characteristics & IMAGE_FILE_DLL)) {
+		// get file offset to import table
+		rawOffset = (DWORD)fileData + importSection->PointerToRawData;
 
-			if (thunkData->u1.AddressOfData > 0x80000000) {
+		// get pointer to import descriptor's file offset. Note that the formula for calculating file offset is: imageBaseAddress + pointerToRawDataOfTheSectionContainingRVAofInterest + (RVAofInterest - SectionContainingRVAofInterest.VirtualAddress)
+		importDescriptor = (PIMAGE_IMPORT_DESCRIPTOR)(rawOffset + (imageNTHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress - importSection->VirtualAddress));
 
-				printf("\t\tOrdinal: %x\n", (WORD)thunkData->u1.AddressOfData);
-			}
-			else {
-				printf("\t\t\tName: %s\n", (rawOffset + (thunkData->u1.AddressOfData - importSection->VirtualAddress + 2)));
+		
+		for (; importDescriptor->Name != 0; importDescriptor++) {
+			// imported dll modules
+			printf("\tDLL Name: %s\n", rawOffset + (importDescriptor->Name - importSection->VirtualAddress));
+			thunk = importDescriptor->OriginalFirstThunk == 0 ? importDescriptor->FirstThunk : importDescriptor->OriginalFirstThunk;
+			thunkData = (PIMAGE_THUNK_DATA)(rawOffset + (thunk - importSection->VirtualAddress));
+			printf("\t\tFunctions:\n");
+			// dll exported functions
+			for (; thunkData->u1.AddressOfData != 0; thunkData++) {
+
+				if (thunkData->u1.AddressOfData > 0x80000000) {
+
+					printf("\t\tOrdinal: %x\n", (WORD)thunkData->u1.AddressOfData);
+				}
+				else {
+					printf("\t\t\tName: %s\n", (rawOffset + (thunkData->u1.AddressOfData - importSection->VirtualAddress + 2)));
+				}
 			}
 		}
 	}
+	else
+		printf("====> No Import Directory\n");
+
+
+	printf("\n[4] ***** EXPORTS DIRECTORY *****\n");
+	if (imageNTHeaders->FileHeader.Characteristics & IMAGE_FILE_DLL) {
+	
+		char* fileName = strrchr(argv[1], '\\');
+		HMODULE hModule;
+		hModule = GetModuleHandle(++fileName);
+		// IMAGE_DOS_HEADER
+		dosHeader = (PIMAGE_DOS_HEADER)hModule;
+		// IMAGE_NT_HEADERS
+		imageNTHeaders = (PIMAGE_NT_HEADERS)((LPBYTE)hModule + (dosHeader->e_lfanew));
+
+		exportDirectory = (PIMAGE_EXPORT_DIRECTORY)((LPBYTE)hModule + imageNTHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+		PDWORD Address = (PDWORD)((LPBYTE)hModule + exportDirectory->AddressOfFunctions);
+		PDWORD Name = (PDWORD)((LPBYTE)hModule + exportDirectory->AddressOfNames);
+
+		PWORD Ordinal = (PWORD)((LPBYTE)hModule + exportDirectory->AddressOfNameOrdinals);
+
+		for (DWORD i = 0; i < exportDirectory->AddressOfFunctions; i++)
+		{
+			// if(!strcmp(FunctionName,(char*)dosHeader+Name[i]))
+			// {
+			printf("\tAddress: %x", (PVOID)((LPBYTE)hModule + Address[Ordinal[i]]));
+			printf("\tName: %s\n", (char*)hModule + Name[i]);
+			// }
+		}
+	}
+	else
+		printf("====> No Export Directory\n");
 	return 0;
 }
