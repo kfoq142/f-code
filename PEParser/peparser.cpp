@@ -176,7 +176,7 @@ int main(int argc, char* argv[]) {
 	printf("\n[4] ***** EXPORTS DIRECTORY *****\n");
 	char* fileName = strrchr(argv[1], '\\');
 	HMODULE hModule;
-	hModule = GetModuleHandle(++fileName);
+	hModule = GetModuleHandle((LPCWSTR)++fileName);
 	// IMAGE_DOS_HEADER
 	dosHeader = (PIMAGE_DOS_HEADER)hModule;
 	// IMAGE_NT_HEADERS
